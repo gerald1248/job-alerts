@@ -1,1 +1,1 @@
-# job-alerts
+# Event exporter

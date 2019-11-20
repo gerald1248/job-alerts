@@ -1,0 +1,6 @@
+FROM ubuntu:18.10
+WORKDIR /app/
+RUN groupadd app && useradd -g app app
+COPY linux/job-alerts /usr/local/bin/job-alerts
+USER app
+CMD ["job-alerts"]

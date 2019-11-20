@@ -1,0 +1,13 @@
+apiVersion: v1
+name: job-alerts
+version: 0.1.0
+description: "job-alerts"
+icon: "https://docs.helm.sh/src/img/helm-logo.svg"
+keywords:
+  - kubernetes
+home: https://github.com/gerald1248/job-alerts
+sources:
+  - https://github.com/gerald1248/job-alerts
+maintainers:
+  - name: gerald1248
+    email: gerald1248@gmail.com

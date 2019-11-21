@@ -19,3 +19,10 @@ type Controller struct {
 
 type State struct {
 }
+
+type LogObject struct {
+	Job       string `json:"job"`
+	Pod       string `json:"pod"`
+	Namespace string `json:"namespace"`
+	Phase     string `json:"phase"`
+}

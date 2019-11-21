@@ -17,7 +17,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	rest "k8s.io/client-go/rest"
 
@@ -62,19 +61,39 @@ func (c *Controller) syncToStdout(key string) error {
 		return nil
 	}
 
-	jobName := obj.(*batchv1beta1.CronJob).ObjectMeta.Name
+	labels := obj.(*v1.Pod).ObjectMeta.Labels
 
-	bytes, err := json.Marshal(obj)
+	job, ok := labels["job-name"]
+
+	if !ok {
+		return nil
+	}
+
+	phase := string(obj.(*v1.Pod).Status.Phase)
+
+	if phase != "Succeeded" && phase != "Failed" {
+		return nil
+	}
+
+	var logObject LogObject
+	logObject.Job = job
+	logObject.Pod = obj.(*v1.Pod).ObjectMeta.Name
+	logObject.Namespace = obj.(*v1.Pod).ObjectMeta.Namespace
+	logObject.Phase = phase
+
+	bytes, err := json.Marshal(logObject)
 	if err != nil {
 		log.Println(fmt.Sprintf("%s: %s", au.Bold(au.Red("Error")), au.Bold(err)))
 		return nil
 	}
+
 	// main JSON output goes to stdout
-	fmt.Printf("%s\n{\"name\":\"%s\"}\n", bytes, jobName)
+	fmt.Printf("%s\n", bytes)
 
 	if c.queue.Len() == 0 {
 		// TODO: is this significant here?
 	}
+
 	return nil
 }
 
@@ -86,14 +105,14 @@ func (c *Controller) handleErr(err error, key interface{}) {
 	}
 
 	if c.queue.NumRequeues(key) < 5 {
-		log.Println(fmt.Sprintf("%s: can't sync event %v: %v", au.Bold(au.Red("Error")), key, err))
+		log.Println(fmt.Sprintf("%s: can't sync pod %v: %v", au.Bold(au.Red("Error")), key, err))
 		c.queue.AddRateLimited(key)
 		return
 	}
 
 	c.queue.Forget(key)
 	runtime.HandleError(err)
-	log.Println(fmt.Sprintf("%s: dropping event %q from the queue: %v", au.Bold(au.Cyan("INFO")), key, err))
+	log.Println(fmt.Sprintf("%s: dropping pod %q from the queue: %v", au.Bold(au.Cyan("INFO")), key, err))
 }
 
 // Run manages the controller lifecycle
@@ -167,11 +186,11 @@ func main() {
 func realMain(clientset kubernetes.Interface) {
 	var mutex = &sync.Mutex{}
 
-	jobListWatcher := cache.NewListWatchFromClient(clientset.BatchV1beta1().RESTClient(), "CronJobs", "", fields.Everything())
+	podListWatcher := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "Pods", "", fields.Everything())
 
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
-	indexer, informer := cache.NewIndexerInformer(jobListWatcher, &v1.Event{}, 0, cache.ResourceEventHandlerFuncs{
+	indexer, informer := cache.NewIndexerInformer(podListWatcher, &v1.Pod{}, 0, cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
